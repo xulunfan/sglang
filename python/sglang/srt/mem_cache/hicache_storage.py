@@ -359,10 +359,20 @@ class HiCacheFile(HiCacheStorage):
         tensor_path = os.path.join(self.file_path, f"{key}.bin")
         try:
             expected = target_location.numel() * target_location.element_size()
+            # Read into a temporary CPU buffer first, then copy to target.
+            # This avoids the pinned-memory tensor .numpy() issue where
+            # numpy() may create a memory copy instead of sharing memory,
+            # causing f.readinto() to silently write into a discarded buffer.
             with open(tensor_path, "rb", buffering=0) as f:
-                buf = memoryview(target_location.view(torch.uint8).contiguous().numpy())
-                if f.readinto(buf) != expected:
-                    raise IOError(f"Short read for {key}")
+                tmp_buffer = bytearray(expected)
+                bytes_read = f.readinto(tmp_buffer)
+                if bytes_read != expected:
+                    raise IOError(
+                        f"Short read for {key}: expected {expected}, got {bytes_read}"
+                    )
+            target_location.copy_(
+                torch.frombuffer(tmp_buffer, dtype=torch.uint8).view(target_location.shape)
+            )
             return target_location
         except FileNotFoundError:
             logger.warning(f"Failed to fetch {key} from HiCacheFile storage.")
