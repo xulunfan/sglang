@@ -3424,10 +3424,12 @@ class TestGoldenModelOverrides(_IsolatedPublish):
                 _moe_runner_backend_quant_constraints(
                     _view(quantization="nvfp4_online", moe_runner_backend="triton")
                 )
-        with override_platform(is_sm110=False, is_sm120=False):
-            # Pinned: the pass answers flashinfer_trtllm, which the mxfp8 arm now
-            # refuses on the devices that have no trtllm-gen MoE kernels. Without
-            # this the assertion would depend on the runner's own GPU.
+        with override_platform(is_sm100=True, is_sm110=False, is_sm120=False):
+            # The pass answers flashinfer_trtllm for mxfp8 on the SM100 family, and
+            # the mxfp8 arm now refuses that where flashinfer has no trtllm-gen MoE
+            # cubins. Pin the device it is stated for, and with it the two probes
+            # that refusal reads -- `override_platform` replaces only what it is
+            # given, so is_sm100 alone would still let an SM120 runner answer True.
             self.assertEqual(
                 _moe_runner_backend_quant_constraints(_view(quantization="mxfp8")),
                 {"moe_runner_backend": "flashinfer_trtllm"},
