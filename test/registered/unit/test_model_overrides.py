@@ -3424,10 +3424,14 @@ class TestGoldenModelOverrides(_IsolatedPublish):
                 _moe_runner_backend_quant_constraints(
                     _view(quantization="nvfp4_online", moe_runner_backend="triton")
                 )
-        self.assertEqual(
-            _moe_runner_backend_quant_constraints(_view(quantization="mxfp8")),
-            {"moe_runner_backend": "flashinfer_trtllm"},
-        )
+        with override_platform(is_sm110=False, is_sm120=False):
+            # Pinned: the pass answers flashinfer_trtllm, which the mxfp8 arm now
+            # refuses on the devices that have no trtllm-gen MoE kernels. Without
+            # this the assertion would depend on the runner's own GPU.
+            self.assertEqual(
+                _moe_runner_backend_quant_constraints(_view(quantization="mxfp8")),
+                {"moe_runner_backend": "flashinfer_trtllm"},
+            )
         # gfx950 accepts --moe-runner-backend aiter for MXFP8 only with aiter enabled
         with (
             override_platform(is_hip=True),
